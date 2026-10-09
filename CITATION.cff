@@ -7,6 +7,11 @@ title: >-
   (vacuum, driver fill, firing and data acquisition)
 version: 1.0.0
 date-released: "2026-10-10"
+doi: 10.5281/zenodo.23270638
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23270638
+    description: Zenodo DOI for v1.0.0
 authors:
   - family-names: Reddy
     given-names: MRK
