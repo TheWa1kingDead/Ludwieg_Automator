@@ -1,0 +1,14 @@
+# LabVIEW
+*.aliases
+*.lvlps
+*.lvproj.bak
+builds/
+*.~vi
+
+# Shot data
+*_NI6374.txt
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini

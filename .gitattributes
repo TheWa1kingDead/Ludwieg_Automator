@@ -1,0 +1,7 @@
+* text=auto
+*.vi    binary
+*.ctl   binary
+*.vit   binary
+*.lvlib binary
+*.pdf   binary
+*.png   binary

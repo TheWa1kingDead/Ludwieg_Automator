@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata below.
+type: software
+title: >-
+  Ludwieg Automator: LabVIEW automation of a Ludwieg tube wind tunnel
+  (vacuum, driver fill, firing and data acquisition)
+version: 1.0.0
+date-released: "2026-10-10"
+authors:
+  - family-names: Reddy
+    given-names: MRK
+    orcid: "https://orcid.org/0009-0006-8420-6672"
+repository-code: "https://github.com/TheWa1kingDead/Ludwieg_Automator"
+license: MIT
+abstract: >-
+  LabVIEW application that runs a complete shot of a Ludwieg tube wind
+  tunnel. A state machine evacuates the test section and dump tank, fills
+  the driver tube in a continuous and a pulsed stage, holds the pressure in a
+  band with a thermal-soak timer, fires the fast-acting valve and the camera
+  with a hardware-timed trigger waveform, records four high-speed pressure
+  channels triggered from the waveform start, and saves the shot with a time
+  column. It includes interlocks for driver over-pressure, vacuum gauge
+  faults and manual abort, and uses NI PCIe-6374 and USB-6003 hardware
+  through NI-DAQmx.
+keywords:
+  - Ludwieg tube
+  - hypersonic wind tunnel
+  - LabVIEW
+  - NI-DAQmx
+  - data acquisition
+  - test automation
+  - state machine
+references:
+  - type: software
+    title: Ludwieg Tube Designer and Analyser
+    authors:
+      - family-names: Reddy
+        given-names: MRK
+    doi: 10.5281/zenodo.23270222
+    repository-code: "https://github.com/TheWa1kingDead/Ludwieg_Designer_and_Analyser"
+  - type: software
+    title: MOC Nozzle BLC Contour Export
+    authors:
+      - family-names: Reddy
+        given-names: MRK
+    doi: 10.5281/zenodo.23270234
+    repository-code: "https://github.com/TheWa1kingDead/MOC_Nozzle_BLC_contour_export"
