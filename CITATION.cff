@@ -21,8 +21,9 @@ abstract: >-
   with a hardware-timed trigger waveform, records four high-speed pressure
   channels triggered from the waveform start, and saves the shot with a time
   column. It includes interlocks for driver over-pressure, vacuum gauge
-  faults and manual abort, and uses NI PCIe-6374 and USB-6003 hardware
-  through NI-DAQmx.
+  faults and manual abort. It was developed for the laboratory's NI
+  PCIe-6374 and USB-6003 hardware through NI-DAQmx; the sequence, triggering
+  scheme and interlocks are general and can be adapted to other setups.
 keywords:
   - Ludwieg tube
   - hypersonic wind tunnel

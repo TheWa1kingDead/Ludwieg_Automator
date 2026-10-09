@@ -2,6 +2,8 @@
 
 LabVIEW application that runs a complete shot of a **Ludwieg tube wind tunnel** from one front panel: it evacuates the test section and dump tank, fills the driver tube to the set pressure, waits for the gas to settle, fires the fast-acting valve and the camera with a precisely timed trigger waveform, records the high-speed pressure signals and saves the shot to a text file. A state machine runs the sequence, with safety interlocks for over-pressure, gauge faults and a manual abort.
 
+The program was written for the hardware available in our laboratory at IIT Hyderabad: the devices, sensors, channel assignments and calibration constants in this repository are ours. The logic itself is general. The same sequence, triggering scheme and interlocks apply to most Ludwieg tubes and other short-duration blowdown facilities, and everything that is specific to our setup is kept in a few clearly marked places so that it can be adapted. See [Adapting to your setup](#adapting-to-your-setup).
+
 It is the operating software for a tunnel and nozzle designed with
 [Ludwieg_Designer_and_Analyser](https://github.com/TheWa1kingDead/Ludwieg_Designer_and_Analyser) and
 [MOC_Nozzle_BLC_contour_export](https://github.com/TheWa1kingDead/MOC_Nozzle_BLC_contour_export).
@@ -13,7 +15,7 @@ It is the operating software for a tunnel and nozzle designed with
 ## Contents
 
 - [Requirements](#requirements)
-- [Hardware and wiring](#hardware-and-wiring)
+- [Reference hardware (our setup)](#reference-hardware-our-setup)
 - [Files](#files)
 - [Quick start](#quick-start)
 - [Front panel](#front-panel)
@@ -23,7 +25,7 @@ It is the operating software for a tunnel and nozzle designed with
 - [Safety interlocks](#safety-interlocks)
 - [Saved data file](#saved-data-file)
 - [SubVIs](#subvis)
-- [Adapting to another facility](#adapting-to-another-facility)
+- [Adapting to your setup](#adapting-to-your-setup)
 - [Limitations](#limitations)
 - [How to cite](#how-to-cite)
 - [Acknowledgements](#acknowledgements)
@@ -37,13 +39,13 @@ Formulas, calibration constants and the threshold values used in every state are
 
 - **LabVIEW 2025 Q1 (25.1)** or newer, Windows. The VIs are saved in that version; to open them in an older LabVIEW, use *File > Save for Previous Version* from 2025 Q1.
 - **NI-DAQmx** driver with LabVIEW support.
-- NI data acquisition hardware as listed below (or equivalent devices, see [Adapting to another facility](#adapting-to-another-facility)).
+- NI data acquisition hardware. Our setup is listed below; other devices can be used, see [Adapting to your setup](#adapting-to-your-setup).
 
 ---
 
-## Hardware and wiring
+## Reference hardware (our setup)
 
-Two NI devices are used: a fast simultaneous-sampling board for the shot, and a low-cost USB device for the slow control loop.
+The VI was developed and is used with the hardware below. Your devices, sensors and channel numbers will differ; what carries over is the **role** of each channel. Two NI devices are used: a fast simultaneous-sampling board for the shot, and a low-cost USB device for the slow control loop.
 
 | Device (default name) | Channel (default) | Front-panel control | Function |
 |---|---|---|---|
@@ -252,11 +254,36 @@ Equations and constants: [`docs/REFERENCE.md`](docs/REFERENCE.md).
 
 ---
 
-## Adapting to another facility
+## Adapting to your setup
 
-- **Channels and devices**: change the channel controls on the front panel. A different fast board works if it supports an AO start trigger and a hardware AI start delay.
-- **Sensors**: change the constants in `Druck_to_Pa.vi` (full scale, zero, ambient pressure), the voltage table in `Pirani_V_to_Pa.vi`, and the sensitivity and gain in `Settling_V_to_Pa.vi`.
-- **Thresholds**: the fill fractions (0.9, 0.995), hold band (0.995 to 1.02), vacuum margin (1.1), over-pressure limit (1.2), fine-fill pulse (150 ms in 1000 ms) and soak time (5000 ms) are constants in the corresponding cases of the state machine. They are listed in [`docs/REFERENCE.md`](docs/REFERENCE.md).
+The VI is built around **roles**, not around specific devices. Any facility that has the same roles can use the same logic.
+
+**What is general and normally stays as it is**
+
+- The shot sequence: evacuate, fill coarse, fill fine, hold and soak, fire, record, save.
+- Hardware-timed firing: one analog output waveform carries the valve and camera pulses, and its start trigger starts the high-speed recording after a set delay. This keeps the valve, the camera and the data on one time base.
+- The interlocks (manual abort, gauge fault, over-pressure) and the safe shutdown of every output.
+- Switching the vacuum pump off during the shot, and saving raw voltages with a time column.
+
+**What is specific to our setup and has to be changed**
+
+| Role | Our hardware | What your hardware needs |
+|---|---|---|
+| High-speed recording | PCIe-6374, 4 channels at 300 kHz | Any DAQmx device with a hardware start trigger and start delay; set `AI_data_record_Ch` and `Frequency (Hz)` |
+| Trigger waveform | PCIe-6374 `ao0:1`, 4.9 V pulses | Two analog (or digital) outputs on the **same** device as the recording, so the AI can use its start trigger; set `Fire_AO_Ch` and the pulse amplitude your valve driver and camera expect |
+| Vacuum pump | PCIe-6374 digital line | Any digital output driving the pump relay; set `Vac_pump_DO_Ch` |
+| Driver fill and vent valves | USB-6003 `ao0:1` (0 / 10 V into SSRs) | Any analog or digital outputs that switch your valve drivers; set `Inlet_SSR_Ch`, `Exhaust_SSR_Ch` |
+| Vacuum gauge | Pirani gauge, 0 to 10 V log output | Replace the table in `Pirani_V_to_Pa.vi` with your gauge's voltage-pressure curve and fault limits |
+| Driver pressure | 14 bar gauge transducer, 0 to 5 V | Set full scale, zero and ambient pressure in `Druck_to_Pa.vi`, or use `Volts_to_pa.vi` for a ratiometric sensor |
+| Settling-chamber pressure | piezoelectric sensor, 1.26 mV/psi | Set sensitivity, gain and baseline window in `Settling_V_to_Pa.vi` |
+
+**Thresholds to review for your tunnel**
+
+The fill fractions (0.9, 0.995), hold band (0.995 to 1.02), vacuum margin (1.1), over-pressure limit (1.2), valve pulse during fine fill and venting (150 ms in 1000 ms) and soak time (5000 ms) were chosen for our driver tube volume and valves. A larger driver or faster valves may need different values. They are constants in the corresponding cases of the state machine and are listed in [`docs/REFERENCE.md`](docs/REFERENCE.md).
+
+**Other software or hardware**
+
+Nothing in the logic depends on LabVIEW itself. The state table in [Shot sequence](#shot-sequence-state-machine), the timing in [Trigger and acquisition timing](#trigger-and-acquisition-timing) and the formulas in [`docs/REFERENCE.md`](docs/REFERENCE.md) are enough to reimplement it, for example in Python with `nidaqmx`, or with another vendor's hardware.
 
 ---
 
@@ -265,7 +292,7 @@ Equations and constants: [`docs/REFERENCE.md`](docs/REFERENCE.md).
 - The ambient pressure in `Druck_to_Pa.vi` is a fixed constant (94 kPa). Update it, or measure it, if the barometric pressure changes significantly.
 - Pressure control is on/off (solenoid valves through SSRs), so the final driver pressure is set to the hold band, not to an exact value.
 - The over-pressure interlock uses the averaged driver pressure from the 100 ms loop; it is not a substitute for a relief valve.
-- The VI has been used with the hardware listed above. Other devices may need changes to the channel ranges and timing.
+- The VI has been tested only with our hardware. Other devices may need changes to the channel ranges, terminal configuration and timing.
 
 ---
 
