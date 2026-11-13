@@ -166,7 +166,7 @@ Any state goes to **Abort** when the abort condition is true (see [Safety interl
 | **FillCoarse** | on (10 V) | off | on | Driver filled continuously. `Fill_cutoff_Pa = 0.9 x P_driver_target` | `P_driver >= Fill_cutoff_Pa` |
 | **FillFine** | pulsed | off | on | Inlet valve opened 150 ms in every 1000 ms to approach the target slowly | `P_driver >= 0.995 x P_driver_target` |
 | **Hold** | off | pulsed if high | on | Pressure kept in the band 0.995 to 1.02 x target. Above the band the exhaust valve is pulsed (150 ms in 1000 ms); below it the state returns to FillFine. A 3 s thermal-soak timer runs while the pressure is in band and restarts when it leaves | in band for `thermal_soak_ms` = 3000 ms |
-| **Ready** | off | off | **off** | The trigger waveform is written to the AO task and the memory gate to the DO task. `Last_run?` selects the waveform with or without the camera trigger pulse. The DO and AI tasks are started (both waiting for the AO), then the AO task is started | next iteration |
+| **Ready** | off | off | **off** | The trigger waveform is written to the AO task and the memory gate to the DO task. On the last run (`Last_run?`) the waveform includes the camera trigger pulse, which completes the recording and closes the cine file; earlier runs use the waveform without it. The DO and AI tasks are started (both waiting for the AO), then the AO task is started | next iteration |
 | **Firing** | off | off | off | Camera and valve pulses are output; AI records after the start delay | AO task done |
 | **Logging** | off | off | off | All AI samples are read from the PCIe-6374, tasks are stopped | data read |
 | **Complete** | off | off | on | If `Run_count < N_runs`, **Next_run?** increments `Run_count` and returns to WaitVac for the next shot. Otherwise `Write?` and `Done?` are enabled: **Write?** saves the shot, **Done?** finishes | `Next_run?` or `Done?` |
@@ -206,7 +206,7 @@ Pulse_length_ms = max(valve_delay + Valve_pulse_ms,
 
 When the AO task starts, `Fire_waveform.vi` outputs, at `Global_driver_rate` samples per second with an amplitude of 4.9 V:
 
-- **`ao0` camera (PCC) pulse**: width `Camera_pulse_ms`, delayed by `Camera_delay`. It is output only when `Camera_trigger_on` is true (the waveform "with trigger"); otherwise this channel stays at 0 V.
+- **`ao0` camera (PCC) pulse**: width `Camera_pulse_ms`, delayed by `Camera_delay`. It is output only when `Camera_trigger_on` is true (the waveform "with trigger", used on the last run to complete the recording and close the cine file); otherwise this channel stays at 0 V.
 - **`ao1` valve pulse**: width `Valve_pulse_ms`, delayed by `valve_delay`.
 - **Memory gate** (digital, `Dev1/port0/line1`): high from `gate_start_ms` for `Cam_gate_len_ms`. It is clocked by the AO sample clock, so it is sample-synchronous with the two analog pulses. On the **Trigger_pulse_waveform** graph it is drawn at 4 V for visibility.
 

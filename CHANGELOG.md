@@ -7,7 +7,7 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 ### Added
 - `Shot_timing.vi`: sets the shot timing from the flow events (valve delay, flow lag, pre-flow margin, gate length, trigger gap) and derives the gate start, camera delay and waveform length. Checks the timing (fail codes 1 to 5, `Timing_OK`, `Timing_msg`); the VI goes to Abort from Idle if the timing is not valid.
 - Memory gate: a digital gate pulse on `Dev1/port0/line1`, clocked by the AO sample clock so it is synchronous with the trigger waveform, and shown on the `Trigger_pulse_waveform` graph.
-- Multiple runs: `N_runs`, `Run_count`, `Next_run?` and `Last_run?`. After a shot, `Next_run?` returns to WaitVac for the next one; `Last_run?` selects the waveform with or without the camera trigger pulse.
+- Multiple runs: `N_runs`, `Run_count`, `Next_run?` and `Last_run?`. After a shot, `Next_run?` returns to WaitVac for the next one; The camera trigger pulse is output on the last run only, to complete the recording and close the cine file.
 - `Fire_waveform.vi`: gate inputs and `Gate` output, and `Camera_trigger_on` to switch the camera pulse off.
 
 ### Changed
