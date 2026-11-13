@@ -1,6 +1,6 @@
 # Ludwieg Automator
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23270638.svg)](https://doi.org/10.5281/zenodo.23270638)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24187540.svg)](https://doi.org/10.5281/zenodo.24187540)
 
 LabVIEW application that runs a complete shot of a **Ludwieg tube wind tunnel** from one front panel: it evacuates the test section and dump tank, fills the driver tube to the set pressure, waits for the gas to settle, fires the fast-acting valve and the camera with a precisely timed trigger waveform, records the high-speed pressure signals and saves the shot to a text file. A state machine runs the sequence, with safety interlocks for over-pressure, gauge faults and a manual abort.
 
@@ -331,7 +331,7 @@ Nothing in the logic depends on LabVIEW itself. The state table in [Shot sequenc
 
 ## How to cite
 
-This software is archived on Zenodo: [doi:10.5281/zenodo.23270638](https://doi.org/10.5281/zenodo.23270638). If you use it, please cite it (GitHub **"Cite this repository"** uses [`CITATION.cff`](CITATION.cff)).
+This software is archived on Zenodo: [doi:10.5281/zenodo.24187540](https://doi.org/10.5281/zenodo.24187540). If you use it, please cite it (GitHub **"Cite this repository"** uses [`CITATION.cff`](CITATION.cff)).
 
 ```bibtex
 @software{reddy_ludwieg_automator_2026,
@@ -340,7 +340,7 @@ This software is archived on Zenodo: [doi:10.5281/zenodo.23270638](https://doi.o
              wind tunnel (vacuum, driver fill, firing and data acquisition)},
   year    = {2026},
   version = {1.1.0},
-  doi     = {10.5281/zenodo.23270638},
+  doi     = {10.5281/zenodo.24187540},
   url     = {https://github.com/TheWa1kingDead/Ludwieg_Automator}
 }
 ```
