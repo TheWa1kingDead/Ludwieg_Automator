@@ -15,7 +15,7 @@ All values below are the ones in the VIs as shipped. They are constants on the b
 | Hold | lower band | `0.995 x P_driver_target` | Below: back to FillFine |
 | Hold | upper band | `1.02 x P_driver_target` | Above: exhaust valve pulsed |
 | Hold | exhaust pulse | 150 ms open in every 1000 ms | Pulsed vent |
-| Hold | `thermal_soak_ms` | 5000 ms | Time in band before Ready |
+| Hold | `thermal_soak_ms` | 3000 ms | Time in band before Ready |
 | all | over-pressure abort | `P_driver > 1.2 x P_driver_target` | Goes to Abort |
 | all | loop period | 100 ms | Main loop wait |
 
@@ -26,12 +26,13 @@ SSR outputs are 10 V (on) or 0 V (off).
 | Item | Value |
 |---|---|
 | Monitoring AI (USB-6003) | 2 channels, continuous, `Global_driver_rate` (1000 Hz), 50 000-sample buffer, 0 to 10 V |
-| Shot AI (PCIe-6374) | 4 channels, finite, `Frequency (Hz)` (300 kHz), `N = Frequency x Capture_time_ms / 1000` |
-| Shot AI trigger | digital edge on `/Dev1/ao/StartTrigger`, start delay `Start_delay_ms / 1000` s |
+| Shot AI (PCIe-6374) | 4 channels, finite, `Frequency (Hz)` (300 kHz), `N = Frequency x AI_Capture_ms / 1000` |
+| Shot AI trigger | digital edge on `/Dev1/ao/StartTrigger`, start delay `AI_Start_delay_ms / 1000` s |
+| Memory gate DO (PCIe-6374) | `Dev1/port0/line1`, finite, clocked by `/Dev1/ao/SampleClock`, written as U32 samples |
 | Fire AO (PCIe-6374) | 2 channels, 0 to 10 V, finite, `Global_driver_rate`, regeneration allowed, on-board memory only |
-| Timing condition | `Start_delay_ms + Capture_time_ms < Pulse_length_ms` |
+| Timing check | `Shot_timing.vi`, see section 3a |
 
-Graph scales: `6374_data_output` and `Settling_chamber_pressure` use `dt = 1000 / Actual_AI_Rate` ms with an offset of `Start_delay_ms`; `Control_pressures` uses 0.1 s per point.
+Graph scales: `6374_data_output` and `Settling_chamber_pressure` use `dt = 1000 / Actual_AI_Rate` ms with an offset of `AI_Start_delay_ms`; `Control_pressures` uses 0.1 s per point.
 
 ## 3. Trigger waveform (`Fire_waveform.vi`)
 
@@ -41,10 +42,35 @@ row 0 (ao0)  camera pulse: amplitude for round(rate x camera_pulse_ms x 0.001) s
              starting at round(rate x camera_delay x 0.001)
 row 1 (ao1)  valve pulse:  amplitude for round(rate x valve_pulse_ms x 0.001) samples,
              starting at round(rate x valve_delay x 0.001)
-amplitude    4.9 V (default)
+amplitude    4.9 V (default); row 0 is 0 V when Camera_trigger_on is false
+Gate         U32 array of N samples: 0xFFFFFFFF for gate_start_ms <= t < gate_start_ms + gate_len_ms, else 0,
+             with t = i x 1000 / rate
 ```
 
-Notes on the block diagram: "camera delay is twice the camera pulse" and "valve delay is twice the valve pulse". Check the `Trigger_pulse_waveform` graph for the actual pulse positions before each shot.
+Check the `Trigger_pulse_waveform` graph for the actual pulse positions before each shot.
+
+## 3a. Shot timing (`Shot_timing.vi`)
+
+```
+gate_start      = valve_delay + flow_lag_ms - pre_flow_ms
+gate_end        = gate_start + gate_len_ms
+camera_delay    = gate_end + trigger_gap_ms
+valve_end       = valve_delay + valve_pulse_ms
+trig_end        = camera_delay + camera_pulse_ms
+ai_end          = start_delay_ms + capture_time_ms
+pulse_length_ms = max(valve_end, trig_end, ai_end) + tail_ms
+```
+
+| fail_code | Condition | Timing_msg |
+|---|---|---|
+| 0 | none | OK |
+| 1 | `gate_len_ms <= 0` | gate_len_ms must be > 0 |
+| 2 | `gate_start < 0` | Gate starts before t=0 - reduce pre_flow_ms |
+| 3 | `start_delay_ms > gate_start` | AI starts after the gate - reduce Start_delay_ms |
+| 4 | `ai_end < gate_end` | AI ends before the gate ends - increase Capture_time_ms |
+| 5 | `pulse_length_ms x rate / 1000 > 4000` | Waveform too long for AO memory - shorten timings |
+
+`Timing_OK = (fail_code == 0)`. Defaults in the main VI: `valve_delay` 100, `Valve_pulse_ms` 30, `flow_lag_ms` 30, `pre_flow_ms` 15, `Cam_gate_len_ms` 40, `trigger_gap_ms` -1, `Camera_pulse_ms` 50, `AI_Start_delay_ms` 115, `AI_Capture_ms` 40, `tail_ms` 50 (all ms).
 
 ## 4. Vacuum gauge (`Pirani_V_to_Pa.vi`)
 
@@ -169,7 +195,7 @@ Defaults: `V_supply` = 5.13 V, `P_min_Pa` = 0, `P_max_Pa` = 103 421 Pa (15 psi).
 ## 9. Data file (`Write_data_to_file.vi`)
 
 ```
-t_i  = Start_delay_ms + i x 1000 / Actual_AI_Rate      [ms]
+t_i  = AI_Start_delay_ms + i x 1000 / Actual_AI_Rate      [ms]
 row  = t_i  V_sensor0  V_sensor1  V_sensor2  V_sensor3
 ```
 

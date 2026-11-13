@@ -53,7 +53,8 @@ The VI was developed and is used with the hardware below. Your devices, sensors 
 |---|---|---|---|
 | **NI PCIe-6374** (`Dev1`) | `Dev1/ai0:3` | `AI_data_record_Ch` | High-speed pressure sensors 0 to 3 during the shot (sensor 0 = settling chamber) |
 | | `Dev1/ao0:1` | `Fire_AO_Ch` | Trigger waveform: `ao0` camera trigger (PCC pulse), `ao1` fast-acting valve pulse |
-| | `Dev1/port0/line0` | `Vac_pump_DO_Ch` | Vacuum pump relay (digital output) |
+| | `Dev1/port1/line1` | `Vac_pump_DO_Ch` | Vacuum pump relay (digital output) |
+| | `Dev1/port0/line1` | (fixed in the block diagram) | Memory gate: digital gate pulse, clocked by the AO sample clock (`/Dev1/ao/SampleClock`) so it is synchronous with the trigger waveform |
 | **NI USB-6003** (`Dev2`) | `Dev2/ai0` | `Vac_pressure_Ch` | Vacuum gauge (Pirani, 0 to 10 V log output) |
 | | `Dev2/ai1` | `Driver_pressure_Ch` | Driver tube pressure transducer (0 to 5 V, 14 bar gauge) |
 | | `Dev2/ao0` | `Inlet_SSR_Ch` | Solid-state relay for the driver fill (inlet) valve, 0 / 10 V |
@@ -69,7 +70,8 @@ The USB-6003 inputs use the terminal configuration set by `AI_input_config` (def
 |-- src/
 |   |-- 0Ludwieg_automation.vi   main VI (front panel + state machine)
 |   |-- State.ctl                type-def enum of the shot states
-|   |-- Fire_waveform.vi         builds the 2-channel camera / valve trigger waveform
+|   |-- Shot_timing.vi           derives the gate, camera delay and waveform length, and checks the timing
+|   |-- Fire_waveform.vi         builds the camera / valve trigger waveform and the memory gate
 |   |-- Pirani_V_to_Pa.vi        Pirani gauge voltage -> pressure (log-linear table)
 |   |-- Druck_to_Pa.vi           driver transducer voltage -> absolute pressure
 |   |-- Settling_V_to_Pa.vi      high-speed sensor voltage -> pressure (baseline removed)
@@ -95,10 +97,11 @@ Keep all VIs in the same folder so LabVIEW finds the subVIs.
 1. Install LabVIEW 2025 Q1 and NI-DAQmx. Check the device names in NI MAX (`Dev1`, `Dev2`) and rename them or change the channel controls to match.
 2. Open `src/0Ludwieg_automation.vi`.
 3. Set the targets: `P_vac_target` with `Vacuum_units`, and `P_driver_target` with `Driver_units`.
-4. Set the shot timing: `Frequency (Hz)`, `Capture_time_ms`, `Start_delay_ms`, and the trigger pulse settings (`Pulse_length_ms`, `Camera_delay`, `Camera_pulse_ms`, `valve_delay`, `Valve_pulse_ms`). Check the **Trigger_pulse_waveform** graph.
-5. Set `Start_path` to the folder where shots should be saved.
-6. **Run** the VI. The sequence runs on its own: vacuum, coarse fill, fine fill, hold, fire, record.
-7. When `Current_state` shows **Complete**, the **Write?** and **Done?** buttons are enabled. Press **Write?** to save the shot (a file dialog opens in `Start_path`), then **Done?** to finish.
+4. Set `N_runs`, the number of shots in the series.
+5. Set the shot timing in the *Dont touch* group: `Frequency (Hz)`, `AI_Start_delay_ms`, `AI_Capture_ms`, `valve_delay`, `Valve_pulse_ms`, `flow_lag_ms`, `pre_flow_ms`, `Cam_gate_len_ms`, `trigger_gap_ms`, `Camera_pulse_ms`. `Pulse_length_ms`, `Camera_delay` and `gate_start_ms` are computed by `Shot_timing.vi`. Check that `Timing_OK` is lit and `Timing_msg` is empty, and check the **Trigger_pulse_waveform** graph.
+6. Set `Start_path` to the folder where shots should be saved.
+7. **Run** the VI. The sequence runs on its own: vacuum, coarse fill, fine fill, hold, fire, record.
+8. When `Current_state` shows **Complete**: if more runs remain, press **Next_run?** to start the next shot (it goes back to WaitVac). Only press it once the state is Complete. After the last run (`Last_run?` lit), press **Write?** to save the shot (a file dialog opens in `Start_path`), then **Done?** to finish.
 
 **ABORT** stops the sequence and closes both SSR valves. **STOP** (`Force_stop`) ends the VI; all outputs are set to a safe state and the DAQmx tasks are cleared.
 
@@ -112,12 +115,14 @@ Keep all VIs in the same folder so LabVIEW finds the subVIs.
 | Monitoring rate | `Global_driver_rate` | 1000 Hz |
 | Vacuum | `P_vac_target`, `Vacuum_units`; indicators `Vac_cutoff_Pa`, `P_vac_Pa`, `Vac_gauge_%`, `Vac_Pump` | 6 Pa |
 | Driver | `P_driver_target`, `Driver_units`; indicators `Fill_cutoff_Pa`, `P_driver_Pa`, `Driver_gauge_%` | 10 bar |
-| Acquisition | `Frequency (Hz)`, `Capture_time_ms`, `Start_delay_ms`; indicator `Actual_AI_Rate` | 300 kHz, 200 ms, 150 ms |
-| Trigger | `Pulse_length_ms`, `Camera_pulse_ms`, `Camera_delay`, `Valve_pulse_ms`, `valve_delay` | 500, 50, 50, 100, 150 ms |
+| Acquisition | `Frequency (Hz)`, `AI_Start_delay_ms`, `AI_Capture_ms`; indicator `Actual_AI_Rate` | 300 kHz, 115 ms, 40 ms |
+| Shot timing (*Dont touch* group) | `valve_delay`, `Valve_pulse_ms`, `flow_lag_ms`, `pre_flow_ms`, `Cam_gate_len_ms`, `trigger_gap_ms`, `Camera_pulse_ms` | 100, 30, 30, 15, 40, -1, 50 ms |
+| Shot timing (computed) | indicators `Pulse_length_ms`, `Camera_delay`, `gate_start_ms`, `Timing_OK`, `Timing_msg` | |
+| Runs | `N_runs`, `Next_run?`; indicators `Run_count`, `Last_run?` | 1 run |
 | Saving | `Start_path`, `Write?`, `Done?`; indicators `Write_OK`, `Saved_file_path` | Desktop |
 | Status | `Current_state`, `Iteration`, `Abort_state`, `Sensor_fault` | |
 | Buttons | `ABORT`, `STOP` (`Force_stop`) | |
-| Graphs | `Control_pressures` (vacuum and driver vs time), `6374_data_output` (raw sensor voltages), `Settling_chamber_pressure`, `Trigger_pulse_waveform` | |
+| Graphs | `Control_pressures` (vacuum and driver vs time), `6374_data_output` (raw sensor voltages), `Settling_chamber_pressure`, `Trigger_pulse_waveform` (trigger pulse, valve pulse and memory gate) | |
 
 The two dials show the measured pressure as a percentage of its target.
 
@@ -130,15 +135,16 @@ The main loop runs every **100 ms**. The current state is held in a shift regist
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> WaitVac
+    Idle --> WaitVac: Timing_OK
     WaitVac --> FillCoarse: P_vac <= 1.1 x P_vac_target
     FillCoarse --> FillFine: P_driver >= 0.9 x P_driver_target
     FillFine --> Hold: P_driver >= 0.995 x P_driver_target
     Hold --> FillFine: P_driver < 0.995 x target
-    Hold --> Ready: in band for 5 s (thermal soak)
-    Ready --> Firing: AI armed, AO started
+    Hold --> Ready: in band for 3 s (thermal soak)
+    Ready --> Firing: DO, AI and AO started
     Firing --> Logging: AO task done
     Logging --> Complete: data read, tasks stopped
+    Complete --> WaitVac: Next_run? and runs remaining
     Complete --> [*]: Done?
     Idle --> Abort
     WaitVac --> Abort
@@ -155,15 +161,15 @@ Any state goes to **Abort** when the abort condition is true (see [Safety interl
 
 | State | Inlet SSR | Exhaust SSR | Vacuum pump | What happens | Leaves when |
 |---|---|---|---|---|---|
-| **Idle** | off | off | on | Start of the sequence | immediately, to WaitVac |
+| **Idle** | off | off | on | Start of the sequence. The shot timing is checked first; if `Timing_OK` is false the state goes to Abort | immediately, to WaitVac (or Abort) |
 | **WaitVac** | off | off | on | Test section and dump tank are pumped down. `Vac_cutoff_Pa = 1.1 x P_vac_target` | `P_vac <= Vac_cutoff_Pa` |
 | **FillCoarse** | on (10 V) | off | on | Driver filled continuously. `Fill_cutoff_Pa = 0.9 x P_driver_target` | `P_driver >= Fill_cutoff_Pa` |
 | **FillFine** | pulsed | off | on | Inlet valve opened 150 ms in every 1000 ms to approach the target slowly | `P_driver >= 0.995 x P_driver_target` |
-| **Hold** | off | pulsed if high | on | Pressure kept in the band 0.995 to 1.02 x target. Above the band the exhaust valve is pulsed (150 ms in 1000 ms); below it the state returns to FillFine. A 5 s thermal-soak timer runs while the pressure is in band and restarts when it leaves | in band for `thermal_soak_ms` = 5000 ms |
-| **Ready** | off | off | **off** | The shot waveform is written to the AO task, the AI task is started (waiting for the AO start trigger), then the AO task is started | next iteration |
+| **Hold** | off | pulsed if high | on | Pressure kept in the band 0.995 to 1.02 x target. Above the band the exhaust valve is pulsed (150 ms in 1000 ms); below it the state returns to FillFine. A 3 s thermal-soak timer runs while the pressure is in band and restarts when it leaves | in band for `thermal_soak_ms` = 3000 ms |
+| **Ready** | off | off | **off** | The trigger waveform is written to the AO task and the memory gate to the DO task. `Last_run?` selects the waveform with or without the camera trigger pulse. The DO and AI tasks are started (both waiting for the AO), then the AO task is started | next iteration |
 | **Firing** | off | off | off | Camera and valve pulses are output; AI records after the start delay | AO task done |
 | **Logging** | off | off | off | All AI samples are read from the PCIe-6374, tasks are stopped | data read |
-| **Complete** | off | off | on | `Write?` and `Done?` enabled. **Write?** saves the shot; **Done?** finishes the run | `Done?` |
+| **Complete** | off | off | on | If `Run_count < N_runs`, **Next_run?** increments `Run_count` and returns to WaitVac for the next shot. Otherwise `Write?` and `Done?` are enabled: **Write?** saves the shot, **Done?** finishes | `Next_run?` or `Done?` |
 | **Abort** | off | off | on | Valves closed; the VI stays in Abort until **STOP** | STOP |
 
 The vacuum pump is switched off during **Ready**, **Firing** and **Logging** so that pump vibration and electrical noise do not reach the measurements.
@@ -172,29 +178,52 @@ The vacuum pump is switched off during **Ready**, **Firing** and **Logging** so 
 
 ## Trigger and acquisition timing
 
-When the AO task starts it outputs a two-channel waveform of length `Pulse_length_ms`, built by `Fire_waveform.vi` at `Global_driver_rate` samples per second with an amplitude of 4.9 V:
+The shot timing is set from the physical events, not from absolute times. `Shot_timing.vi` takes the valve timing, the flow delays and the acquisition window, and derives the rest:
 
-- **`ao0` camera (PCC) pulse**: width `Camera_pulse_ms`, delayed by `Camera_delay`.
+```
+gate_start_ms   = valve_delay + flow_lag_ms - pre_flow_ms
+gate_end        = gate_start_ms + Cam_gate_len_ms
+Camera_delay    = gate_end + trigger_gap_ms
+Pulse_length_ms = max(valve_delay + Valve_pulse_ms,
+                      Camera_delay + Camera_pulse_ms,
+                      AI_Start_delay_ms + AI_Capture_ms) + tail_ms     (tail_ms = 50)
+```
+
+- `flow_lag_ms`: time from the valve pulse to the start of the flow in the test section.
+- `pre_flow_ms`: how early the gate opens before the flow arrives.
+- `Cam_gate_len_ms`: length of the memory gate.
+- `trigger_gap_ms`: offset of the camera trigger from the end of the gate (negative: before the end).
+
+`Timing_OK` is true only when all of these hold; otherwise `Timing_msg` says what to change and the VI does not start (Idle goes to Abort):
+
+| Code | Condition | Message |
+|---|---|---|
+| 1 | `Cam_gate_len_ms <= 0` | gate_len_ms must be > 0 |
+| 2 | `gate_start_ms < 0` | Gate starts before t=0, reduce pre_flow_ms |
+| 3 | `AI_Start_delay_ms > gate_start_ms` | AI starts after the gate, reduce Start_delay_ms |
+| 4 | `AI_Start_delay_ms + AI_Capture_ms < gate_end` | AI ends before the gate ends, increase Capture_time_ms |
+| 5 | `Pulse_length_ms x rate / 1000 > 4000` | Waveform too long for AO memory, shorten timings |
+
+When the AO task starts, `Fire_waveform.vi` outputs, at `Global_driver_rate` samples per second with an amplitude of 4.9 V:
+
+- **`ao0` camera (PCC) pulse**: width `Camera_pulse_ms`, delayed by `Camera_delay`. It is output only when `Camera_trigger_on` is true (the waveform "with trigger"); otherwise this channel stays at 0 V.
 - **`ao1` valve pulse**: width `Valve_pulse_ms`, delayed by `valve_delay`.
+- **Memory gate** (digital, `Dev1/port0/line1`): high from `gate_start_ms` for `Cam_gate_len_ms`. It is clocked by the AO sample clock, so it is sample-synchronous with the two analog pulses. On the **Trigger_pulse_waveform** graph it is drawn at 4 V for visibility.
 
-The PCIe-6374 AI task uses the AO start trigger (`/Dev1/ao/StartTrigger`) with a start delay of `Start_delay_ms`, then records `Capture_time_ms` of data at `Frequency (Hz)` on four channels (finite samples, `N = Frequency x Capture_time_ms / 1000`).
-
-```
-t = 0                 AO start trigger (waveform begins)
-t = Camera_delay      camera pulse  (Camera_pulse_ms wide)
-t = valve_delay       valve pulse   (Valve_pulse_ms wide)
-t = Start_delay_ms    AI recording starts
-t = Start_delay_ms + Capture_time_ms   AI recording ends
-t = Pulse_length_ms   waveform ends
-```
-
-The timing must satisfy
+The PCIe-6374 AI task uses the AO start trigger (`/Dev1/ao/StartTrigger`) with a start delay of `AI_Start_delay_ms`, then records `AI_Capture_ms` of data at `Frequency (Hz)` on four channels (finite samples, `N = Frequency x AI_Capture_ms / 1000`).
 
 ```
-Start_delay_ms + Capture_time_ms < Pulse_length_ms
+t = 0                                AO start trigger (waveform begins)
+t = valve_delay                      valve pulse (Valve_pulse_ms wide)
+t = AI_Start_delay_ms                AI recording starts (before the gate)
+t = gate_start_ms                    memory gate opens
+t = gate_end                         memory gate closes
+t = Camera_delay                     camera pulse (Camera_pulse_ms wide)
+t = AI_Start_delay_ms + AI_Capture_ms   AI recording ends (after the gate)
+t = Pulse_length_ms                  waveform ends
 ```
 
-so that the AI record ends before the AO task is done. Always check the **Trigger_pulse_waveform** graph before a shot: it shows the waveform exactly as it will be output.
+Always check the **Trigger_pulse_waveform** graph before a shot: it shows the waveform and gate exactly as they will be output.
 
 `Actual_AI_Rate` shows the sample rate the device actually uses (the PCIe-6374 rounds the requested rate to its timebase, e.g. 300 kHz becomes 300.3 kHz). The time axes and the saved time column use this value.
 
@@ -233,7 +262,7 @@ These are software interlocks. Keep the mechanical safety devices of the facilit
 
 | Column | Content | Units |
 |---|---|---|
-| 1 | time from the AO start trigger, `t = Start_delay_ms + i x 1000 / Actual_AI_Rate` | ms |
+| 1 | time from the AO start trigger, `t = AI_Start_delay_ms + i x 1000 / Actual_AI_Rate` | ms |
 | 2 to 5 | sensors 0 to 3 (`AI_data_record_Ch`) | V (raw) |
 
 Values are written with six decimals (`%.6f`). The raw voltages are saved so that the calibration can be applied, or corrected, afterwards.
@@ -244,13 +273,14 @@ Values are written with six decimals (`%.6f`). The raw voltages are saved so tha
 
 | VI | Inputs | Outputs | Function |
 |---|---|---|---|
-| `Fire_waveform.vi` | rate, pulse_length_ms, camera_delay, camera_pulse_ms, valve_delay, valve_pulse_ms, amplitude | 2 x N waveform | Camera and valve trigger pulses |
+| `Shot_timing.vi` | rate, start_delay_ms, capture_time_ms, valve_delay, valve_pulse_ms, camera_pulse_ms, flow_lag_ms, pre_flow_ms, gate_len_ms, trigger_gap_ms, tail_ms | gate_start_ms, camera_delay, pulse_length_ms, Timing_OK, fail_code, Timing_msg | Derives the gate, camera delay and waveform length from the flow timing and checks them (codes 1 to 5) |
+| `Fire_waveform.vi` | rate, pulse_length_ms, camera_delay, camera_pulse_ms, valve_delay, valve_pulse_ms, amplitude, gate_start_ms, gate_len_ms, Camera_trigger_on | 2 x N waveform, Gate (U32 digital samples), N | Camera and valve trigger pulses, and the memory gate. `Camera_trigger_on` = false sets the camera channel to 0 V |
 | `Pirani_V_to_Pa.vi` | V_in | P_Pa, P_mbar, Sensor_fault, At_atm | Interpolates log10(P/mbar) from a 55-point voltage table (1e-3 to 1000 mbar). Fault below 1.25 V, atmosphere at 9.99 V or more |
 | `Druck_to_Pa.vi` | V_in, V_FS, P_FS_gauge_Pa, P_ambient_Pa, V_zero | P_abs_Pa, P_gauge_Pa | Linear gauge transducer with zero offset, plus ambient pressure |
 | `Settling_V_to_Pa.vi` | V_array, Actual_AI_Rate, baseline_ms, sens_mV_per_psi, gain | P_Pa_array | Removes the mean of the first `baseline_ms`, converts mV/psi sensitivity and amplifier gain to Pa |
 | `Units_to_Pa.vi` | Value, Units | P_Pa | Pa, kPa, bar, psi |
 | `Volts_to_pa.vi` | V_in, V_supply, P_min_Pa, P_max_Pa | P_Pa, Out_of_range | Ratiometric transducer, 10 to 90% of supply. Not used by the main VI; kept for other sensors |
-| `Write_data_to_file.vi` | shot_data, Actual_AI_Rate, Start_delay_ms, start_path | Write_OK, file_path | Saves the shot with a time column |
+| `Write_data_to_file.vi` | shot_data, Actual_AI_Rate, AI_Start_delay_ms, start_path | Write_OK, file_path | Saves the shot with a time column |
 
 Equations and constants: [`docs/REFERENCE.md`](docs/REFERENCE.md).
 
@@ -273,6 +303,7 @@ The VI is built around **roles**, not around specific devices. Any facility that
 |---|---|---|
 | High-speed recording | PCIe-6374, 4 channels at 300 kHz | Any DAQmx device with a hardware start trigger and start delay; set `AI_data_record_Ch` and `Frequency (Hz)` |
 | Trigger waveform | PCIe-6374 `ao0:1`, 4.9 V pulses | Two analog (or digital) outputs on the **same** device as the recording, so the AI can use its start trigger; set `Fire_AO_Ch` and the pulse amplitude your valve driver and camera expect |
+| Memory gate | PCIe-6374 `port0/line1`, clocked by the AO sample clock | A digital output that can use the AO sample clock as its clock; change the channel constant on the block diagram |
 | Vacuum pump | PCIe-6374 digital line | Any digital output driving the pump relay; set `Vac_pump_DO_Ch` |
 | Driver fill and vent valves | USB-6003 `ao0:1` (0 / 10 V into SSRs) | Any analog or digital outputs that switch your valve drivers; set `Inlet_SSR_Ch`, `Exhaust_SSR_Ch` |
 | Vacuum gauge | Pirani gauge, 0 to 10 V log output | Replace the table in `Pirani_V_to_Pa.vi` with your gauge's voltage-pressure curve and fault limits |
@@ -281,7 +312,7 @@ The VI is built around **roles**, not around specific devices. Any facility that
 
 **Thresholds to review for your tunnel**
 
-The fill fractions (0.9, 0.995), hold band (0.995 to 1.02), vacuum margin (1.1), over-pressure limit (1.2), valve pulse during fine fill and venting (150 ms in 1000 ms) and soak time (5000 ms) were chosen for our driver tube volume and valves. A larger driver or faster valves may need different values. They are constants in the corresponding cases of the state machine and are listed in [`docs/REFERENCE.md`](docs/REFERENCE.md).
+The fill fractions (0.9, 0.995), hold band (0.995 to 1.02), vacuum margin (1.1), over-pressure limit (1.2), valve pulse during fine fill and venting (150 ms in 1000 ms) and soak time (3000 ms) were chosen for our driver tube volume and valves. A larger driver or faster valves may need different values. They are constants in the corresponding cases of the state machine and are listed in [`docs/REFERENCE.md`](docs/REFERENCE.md).
 
 **Other software or hardware**
 
@@ -308,7 +339,7 @@ This software is archived on Zenodo: [doi:10.5281/zenodo.23270638](https://doi.o
   title   = {{Ludwieg Automator}: LabVIEW automation of a Ludwieg tube
              wind tunnel (vacuum, driver fill, firing and data acquisition)},
   year    = {2026},
-  version = {1.0.0},
+  version = {1.1.0},
   doi     = {10.5281/zenodo.23270638},
   url     = {https://github.com/TheWa1kingDead/Ludwieg_Automator}
 }
